@@ -1,6 +1,4 @@
 
-import json
-import datetime
 import requests
 import pandas as pd
 import numpy as np
@@ -9,10 +7,6 @@ from flask import Flask, request
 app = Flask(__name__)
 
 @app.route('/')
-def hello_world():
-    return json.dumps({'current_datetime': datetime.datetime.now().isoformat()})
-
-@app.route('/test')
 def test():
     return """
 <html lang = "en">
