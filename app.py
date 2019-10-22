@@ -44,6 +44,7 @@ def test():
                <option value = "useful4">four</option>
                <option value = "useful5">five</option>
                <option value = "useful6">six</option>
+               <option value = "useful7">seven</option>
              </select>
           </p>
        </fieldset>
@@ -106,7 +107,7 @@ def test():
 </html>
     """
 
-@app.route('/test', methods=['POST'])
+@app.route('/', methods=['POST'])
 def page_input():
     uri = "bolt://3.220.233.169:7687"
     driver = GraphDatabase.driver(uri, auth=("neo4j", "i-0e23d19f0d8795714"))
@@ -115,10 +116,10 @@ def page_input():
     WHERE b.id in ['5yZ1XmDcOEsElDeb9PlPDQ','PL3cimEUfNHlenOGSOAdJg','4n81G-pmC3rfhmaPsbwYKg','iwGhazq9eP51PSerTrMrwg','R3TC2oq8fQK9c9BNMZ-ynA']\
     RETURN b.id, collect(c.id)", ['b.id', 'cats'])
 
-    test_businesses=test_bizz=cypher(driver, 'PROFILE MATCH (s:State)<--(:City)<--(b:Business)-->(c:Category)\
-    WHERE s.name="NV" and c.id in ["Japanese"," Sushi Bars","Beer", " Bars", "American (Traditional)", " Wine & Spirits", "Sports Bars", "Nightlife", "Ramen", "Pubs", " Dive Bars", "Seafood"]\
+    test_businesses=test_bizz=cypher(driver, 'MATCH (n:City)<--(b:Business)-->(c:Category)\
+    WHERE n.name="las vegas" and b.is_open=1 and b.review_count>20 and b.stars>3 and c.id in ["Japanese"," Sushi Bars","Beer", " Bars", "American (Traditional)", " Wine & Spirits", "Sports Bars", "Nightlife", "Ramen", "Pubs", " Dive Bars", "Seafood"]\
     RETURN DISTINCT b.id', ['b.id'])
-    sample_businesses=test_businesses.sample(200)
+    sample_businesses=test_businesses.sample(150)
 
     user_cat_ids = [request.form['cool'], request.form['funny'], request.form['useful']]
     ratings=[]
@@ -131,9 +132,10 @@ def page_input():
     review_dist=ratings_df.merge(biz_cats, on='b.id')
     biz_id='Os1n1_idfw9vv9kwULGJnQ'
 
+    pd.set_option('display.max_colwidth', -1)
     predicted_ratings=[(predict_rating(driver, user_cat_ids, review_dist, x),x) for x in sample_businesses['b.id']]
-    recommendations=pd.DataFrame(predicted_ratings, columns=['Predicted Rating', 'Business ID']).sort_values('Predicted Rating', ascending=False).head()
-
+    recommendations=pd.DataFrame(predicted_ratings, columns=['Predicted Rating', 'Restaurant']).sort_values('Predicted Rating', ascending=False).head()
+    recommendations['Restaurant']=[f'<a href="https://www.yelp.com/biz/{x}" target="_blank">{x}</a>' for x in recommendations['Restaurant'] ]
     #prediction = predict_rating(driver, user_cat_ids, review_dist, biz_id)
     #exbp=expected_rating(biz_preference_demo(driver, user_cat_ids, biz_id, 'NV'))
     #bp=biz_preference_demo(driver, user_cat_ids, biz_id, 'NV')
@@ -141,7 +143,7 @@ def page_input():
 
 
 
-    return recommendations.to_html()
+    return recommendations.to_html(escape=False)
 
 
 def predict_rating(driver, user_cat_ids, review_dist, biz_id):
@@ -181,8 +183,8 @@ def biz_preference_demo(driver, user_cat_ids, biz_id, state):
     # in state
     review_dist = cypher(
         driver,
-        f"MATCH (u:User)-[:WROTE]->(r:Review)-[:REVIEWS]->(b:Business)-->(:City)-->(s:State)\
-        WHERE b.id='{biz_id}' AND s.name='{state}'\
+        f"MATCH (u:User)-[:WROTE]->(r:Review)-[:REVIEWS]->(b:Business)\
+        WHERE b.id='{biz_id}'\
         RETURN r.id, r.stars, u.id LIMIT 300",
         [
             'r.id',
@@ -252,15 +254,15 @@ def biz_preference_demo(driver, user_cat_ids, biz_id, state):
                 except BaseException:
                     cats_by_stars[i][j - 1] = 0
 
-        else:
-            # If there are no users in a category we use the review
-            # distribution without the conditional
-
-            for j in (1, 2, 3, 4, 5):
-                try:
-                    cats_by_stars[i][j - 1] = review_stars[j]
-                except BaseException:
-                    cats_by_stars[i][j - 1] = 0
+        # else:
+        #     # If there are no users in a category we use the review
+        #     # distribution without the conditional
+        #
+        #     for j in (1, 2, 3, 4, 5):
+        #         try:
+        #             cats_by_stars[i][j - 1] = review_stars[j]
+        #         except BaseException:
+        #             cats_by_stars[i][j - 1] = 0
 
     PRaj = ((cats_by_stars + 1) / (numerator + num_cat)).prod(axis=0)
 
@@ -343,14 +345,14 @@ def user_preference_demo(driver, review_dist, biz_id):
                     cats_by_stars[i][j - 1] = cat_stars[j]
                 except BaseException:
                     cats_by_stars[i][j - 1] = 0
-        else:
-            # If there are no businesses in a category we use the review
-            # distribution without the conditional
-            for j in (1, 2, 3, 4, 5):
-                try:
-                    cats_by_stars[i][j - 1] = 3
-                except BaseException:
-                    cats_by_stars[i][j - 1] = 0
+        # else:
+        #     # If there are no businesses in a category we use the review
+        #     # distribution without the conditional
+        #     for j in (1, 2, 3, 4, 5):
+        #         try:
+        #             cats_by_stars[i][j - 1] = review_stars[j]
+        #         except BaseException:
+        #             cats_by_stars[i][j - 1] = 0
 
     PRaj = ((cats_by_stars + 1) / (numerator + num_cat)).prod(axis=0)
 
