@@ -122,7 +122,7 @@ def page_input():
     # RETURN DISTINCT b.id', ['b.id'])
     # test_businesses.to_pickle('test_businesses')
     test_businesses=pd.read_pickle("test_businesses")
-    print(test_businesses.shape)
+
     sample_businesses=test_businesses.sample(30)
 
 
@@ -176,10 +176,10 @@ def page_input():
 
 
     pd.set_option('display.max_colwidth', -1)
-    time1=time.time()
+    #time1=time.time()
     predicted_ratings=[(predict_rating(driver, user_cat_ids, user_review_dist, business_review_dist, biz_category_lookup, user_category_lookup,x),x) for x in sample_businesses['b.id']]
-    time2=time.time()
-    print(time2-time1)
+    #time2=time.time()
+    #print(time2-time1)
 
 
     recommendations=pd.DataFrame(predicted_ratings, columns=['Predicted Rating', 'Restaurant']).sort_values('Predicted Rating', ascending=False).head()
