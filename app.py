@@ -111,15 +111,19 @@ def test():
 def page_input():
     uri = "bolt://3.220.233.169:7687"
     driver = GraphDatabase.driver(uri, auth=("neo4j", "i-0e23d19f0d8795714"))
-    biz_cats=cypher(driver, "\
-    MATCH (b:Business)-[:IN_CATEGORY]->(c:Category)\
-    WHERE b.id in ['5yZ1XmDcOEsElDeb9PlPDQ','PL3cimEUfNHlenOGSOAdJg','4n81G-pmC3rfhmaPsbwYKg','iwGhazq9eP51PSerTrMrwg','R3TC2oq8fQK9c9BNMZ-ynA']\
-    RETURN b.id, collect(c.id)", ['b.id', 'cats'])
+    # biz_cats=cypher(driver, "\
+    # MATCH (b:Business)-[:IN_CATEGORY]->(c:Category)\
+    # WHERE b.id in ['5yZ1XmDcOEsElDeb9PlPDQ','PL3cimEUfNHlenOGSOAdJg','4n81G-pmC3rfhmaPsbwYKg','iwGhazq9eP51PSerTrMrwg','R3TC2oq8fQK9c9BNMZ-ynA']\
+    # RETURN b.id, collect(c.id)", ['b.id', 'cats'])
+    biz_cats=pd.read_pickle("biz_cats")
 
-    test_businesses=test_bizz=cypher(driver, 'MATCH (n:City)<--(b:Business)-->(c:Category)\
-    WHERE n.name="las vegas" and b.is_open=1 and b.review_count>20 and b.stars>3 and c.id in ["Japanese"," Sushi Bars","Beer", " Bars", "American (Traditional)", " Wine & Spirits", "Sports Bars", "Nightlife", "Ramen", "Pubs", " Dive Bars", "Seafood"]\
-    RETURN DISTINCT b.id', ['b.id'])
+    # test_businesses=test_bizz=cypher(driver, 'MATCH (n:City)<--(b:Business)-->(c:Category)\
+    # WHERE n.name="las vegas" and b.is_open=1 and b.review_count>20 and b.stars>3 and c.id in ["Japanese"," Sushi Bars","Beer", " Bars", "American (Traditional)", " Wine & Spirits", "Sports Bars", "Nightlife", "Ramen", "Pubs", " Dive Bars", "Seafood"]\
+    # RETURN DISTINCT b.id', ['b.id'])
+    # test_businesses.to_pickle('test_businesses')
+    test_businesses=pd.read_pickle("test_businesses")
     sample_businesses=test_businesses.sample(150)
+
 
     user_cat_ids = [request.form['cool'], request.form['funny'], request.form['useful']]
     ratings=[]
@@ -129,11 +133,51 @@ def page_input():
         ratings.append([key,int(rating)])
 
     ratings_df=pd.DataFrame(ratings, columns=['b.id','r.stars'])
-    review_dist=ratings_df.merge(biz_cats, on='b.id')
+    user_review_dist=ratings_df.merge(biz_cats, on='b.id')
     biz_id='Os1n1_idfw9vv9kwULGJnQ'
 
+    # business_review_dist = cypher(
+    #     driver,
+    #     f"MATCH (rep:Reputation)<--(u:User)-[:WROTE]->(r:Review)-[:REVIEWS]->(b:Business)\
+    #     WHERE b.id in {list(test_businesses['b.id'])} AND rep.id in {user_cat_ids}\
+    #     RETURN r.stars, u.id, b.id",
+    #     [
+    #         'r.stars',
+    #         'u.id',
+    #         'b.id'
+    #         ])
+    business_review_dist=pd.read_pickle('business_review_dist')
+    # business_review_dist.to_pickle('business_review_dist')
+
+    # biz_category_lookup = cypher(
+    #     driver,
+    #     f"MATCH (b:Business)-[:IN_CATEGORY]->(c:Category)\
+    #     WHERE b.id in {list(test_businesses['b.id'])} \
+    #     RETURN b.id, c.id",
+    #     [
+    #         'b.id',
+    #         'c.id'
+    #         ])
+    # biz_category_lookup.to_pickle('biz_category_lookup')
+    biz_category_lookup=pd.read_pickle('biz_category_lookup')
+    # user_category_lookup = cypher(
+    #     driver,
+    #     f"MATCH (rep:Reputation)<--(u:User)-[:WROTE]->(:Review)-[:REVIEWS]->(b:Business)\
+    #     WHERE b.id in {list(test_businesses['b.id'])} AND rep.id in {user_cat_ids}\
+    #     RETURN u.id, rep.id ",
+    #     [
+    #         'u.id',
+    #         'rep.id'
+    #         ])
+    # user_category_lookup.to_pickle('user_category_lookup')
+    user_category_lookup=pd.read_pickle('user_category_lookup')
+
+
+
+
+
     pd.set_option('display.max_colwidth', -1)
-    predicted_ratings=[(predict_rating(driver, user_cat_ids, review_dist, x),x) for x in sample_businesses['b.id']]
+    predicted_ratings=[(predict_rating(driver, user_cat_ids, user_review_dist, business_review_dist, biz_category_lookup, user_category_lookup,x),x) for x in sample_businesses['b.id']]
     recommendations=pd.DataFrame(predicted_ratings, columns=['Predicted Rating', 'Restaurant']).sort_values('Predicted Rating', ascending=False).head()
     recommendations['Restaurant']=[f'<a href="https://www.yelp.com/biz/{x}" target="_blank">{x}</a>' for x in recommendations['Restaurant'] ]
     #prediction = predict_rating(driver, user_cat_ids, review_dist, biz_id)
@@ -146,10 +190,10 @@ def page_input():
     return recommendations.to_html(escape=False)
 
 
-def predict_rating(driver, user_cat_ids, review_dist, biz_id):
+def predict_rating(driver, user_cat_ids, user_review_dist, business_review_dist, biz_category_lookup, user_category_lookup, biz_id):
 
-    biz_pref = biz_preference_demo(driver, user_cat_ids, biz_id, "NV")
-    user_pref = user_preference_demo(driver, review_dist, biz_id)
+    biz_pref = biz_preference_demo(driver, user_cat_ids, business_review_dist, user_category_lookup, biz_id)
+    user_pref = user_preference_demo(driver, user_review_dist, biz_category_lookup, biz_id)
     joint_prob = (biz_pref * user_pref)/sum(biz_pref * user_pref)
 
     return expected_rating(joint_prob)
@@ -177,51 +221,32 @@ def expected_rating(rating_dist):
         runsum += rating_dist[i - 1] * i
     return runsum
 
-def biz_preference_demo(driver, user_cat_ids, biz_id, state):
+def biz_preference_demo(driver, user_cat_ids, business_review_dist, user_category_lookup, biz_id):
 
-    # send a cypher query to the server that returns reviews of biz by people
-    # in state
-    review_dist = cypher(
-        driver,
-        f"MATCH (u:User)-[:WROTE]->(r:Review)-[:REVIEWS]->(b:Business)\
-        WHERE b.id='{biz_id}'\
-        RETURN r.id, r.stars, u.id LIMIT 300",
-        [
-            'r.id',
-            'r.stars',
-            'u.id'])
 
-    print(review_dist.shape)
-    review_stars = review_dist['r.stars'].value_counts()
-    num_reviews = review_dist['r.stars'].shape[0]
+    review_stars = business_review_dist['r.stars'].value_counts()
+    num_reviews = business_review_dist['r.stars'].shape[0]
 
 
     # we initialize a blank list of users in the user categories
     user_in_cat = []
 
+    business_review_dist=business_review_dist.loc[business_review_dist['b.id']==biz_id]
+
     for cat in user_cat_ids:
-        # this loop sends a crypher query to retreive users in each category in
-        # the state
-        temp = cypher(
-            driver,
-            f'MATCH (u:User)-[]->(r:Reputation)\
-            USING INDEX u:User(id)\
-            WHERE r.id ="{cat}" and u.id IN {list(review_dist["u.id"])}\
-            RETURN u.id LIMIT 50',
-            ['u.id'])
-        user_in_cat.append(temp)
-        print(temp.shape)
+        users=user_category_lookup.loc[lambda df: cat == df['rep.id']]
+        user_in_cat.append(users['u.id'])
+    print('biz')
 
 
     reviews_in_cat = []
+
     for i in range(len(user_in_cat)):
-        # this loop goes through each user category and sends a cypher query to get the reviews of
-        # the business from users in the category
         sim_user = []
-
+        print('sim_user')
         for temp_user in user_in_cat[i]:
-
-            temp_rev=review_dist.loc[review_dist['u.id']==temp_user]
+            print('temp_user')#something wrong here
+            temp_rev=business_review_dist.loc[business_review_dist['u.id']==temp_user]
 
             sim_user.append(temp_rev['r.stars'].astype('int16'))
 
@@ -274,18 +299,19 @@ def biz_preference_demo(driver, user_cat_ids, biz_id, state):
 
     return biz_prefs
 
-def user_preference_demo(driver, review_dist, biz_id):
+def user_preference_demo(driver, user_review_dist, biz_category_lookup, biz_id):
 
     # send a cypher query to the server that returns all of the biz's
     # categories
-    biz_categories = cypher(driver, f"\
-    MATCH (b:Business)-[:IN_CATEGORY]->(c:Category) \
-    WHERE b.id='{biz_id}' RETURN c.id", ['c.id'])
+    categories_df=biz_category_lookup.loc[biz_category_lookup['b.id']==biz_id]
+    cat_ids=set(categories_df['c.id'].values)
+    print('biz')
+
 
     # these manipulate the biz categories and user's reviews for computation
     # later
-    review_stars = review_dist['r.stars'].value_counts()
-    num_reviews = review_dist['r.stars'].shape[0]
+    review_stars = user_review_dist['r.stars'].value_counts()
+    num_reviews = user_review_dist['r.stars'].shape[0]
     cat_ids = list(biz_categories['c.id'])
 
 
@@ -295,8 +321,8 @@ def user_preference_demo(driver, review_dist, biz_id):
     for cat in cat_ids:
         temp=[]
         for i in range(5):
-            if cat in review_dist['cats'].iloc[i]:
-                temp.append(review_dist['b.id'].iloc[i])
+            if cat in user_review_dist['cats'].iloc[i]:
+                temp.append(user_review_dist['b.id'].iloc[i])
         if temp:
             biz_in_cat.append(temp)
 
@@ -310,7 +336,7 @@ def user_preference_demo(driver, review_dist, biz_id):
 
         for temp_biz in biz_in_cat[i]:
 #             temp_biz=biz_in_cat[i][j]
-            temp_rev=review_dist.loc[review_dist['b.id']==temp_biz]
+            temp_rev=user_review_dist.loc[user_review_dist['b.id']==temp_biz]
 
             sim_biz.append(int(temp_rev['r.stars']))
 
