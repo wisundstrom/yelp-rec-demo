@@ -123,7 +123,7 @@ def page_input():
     # test_businesses.to_pickle('test_businesses')
     test_businesses=pd.read_pickle("test_businesses")
     print(test_businesses.shape)
-    sample_businesses=test_businesses.sample(20)
+    sample_businesses=test_businesses.sample(30)
 
 
     user_cat_ids = [request.form['cool'], request.form['funny'], request.form['useful']]
