@@ -110,7 +110,7 @@ def test():
 @app.route('/', methods=['POST'])
 def page_input():
     uri = "bolt://3.220.233.169:7687"
-    driver =0 #GraphDatabase.driver(uri, auth=("neo4j", "i-0e23d19f0d8795714"))
+    driver =0# GraphDatabase.driver(uri, auth=("neo4j", "i-0e23d19f0d8795714"))
     # biz_cats=cypher(driver, "\
     # MATCH (b:Business)-[:IN_CATEGORY]->(c:Category)\
     # WHERE b.id in ['5yZ1XmDcOEsElDeb9PlPDQ','PL3cimEUfNHlenOGSOAdJg','4n81G-pmC3rfhmaPsbwYKg','iwGhazq9eP51PSerTrMrwg','R3TC2oq8fQK9c9BNMZ-ynA']\
@@ -123,7 +123,7 @@ def page_input():
     # test_businesses.to_pickle('test_businesses')
     test_businesses=pd.read_pickle("test_businesses")
     print(test_businesses.shape)
-    sample_businesses=test_businesses#.sample(20)
+    sample_businesses=test_businesses.sample(20)
 
 
     user_cat_ids = [request.form['cool'], request.form['funny'], request.form['useful']]
@@ -176,19 +176,14 @@ def page_input():
 
 
     pd.set_option('display.max_colwidth', -1)
-    # time1=time.time()
-    # predicted_ratings=[(predict_rating(driver, user_cat_ids, user_review_dist, business_review_dist, biz_category_lookup, user_category_lookup,x),x) for x in sample_businesses['b.id']]
-    # time2=time.time()
-    # print(time2-time1)
-
     time1=time.time()
-    biz_predicted_ratings=[(expected_rating(biz_preference_demo(driver, user_cat_ids, business_review_dist, user_category_lookup,x)),x) for x in sample_businesses['b.id']]
+    predicted_ratings=[(predict_rating(driver, user_cat_ids, user_review_dist, business_review_dist, biz_category_lookup, user_category_lookup,x),x) for x in sample_businesses['b.id']]
     time2=time.time()
     print(time2-time1)
-    # biz_predicted_ratings.to_pickle("111predictedratings")
 
-    # recommendations=pd.DataFrame(predicted_ratings, columns=['Predicted Rating', 'Restaurant']).sort_values('Predicted Rating', ascending=False).head()
-    # recommendations['Restaurant']=[f'<a href="https://www.yelp.com/biz/{x}" target="_blank">{x}</a>' for x in recommendations['Restaurant'] ]
+
+    recommendations=pd.DataFrame(predicted_ratings, columns=['Predicted Rating', 'Restaurant']).sort_values('Predicted Rating', ascending=False).head()
+    recommendations['Restaurant']=[f'<a href="https://www.yelp.com/biz/{x}" target="_blank">{x}</a>' for x in recommendations['Restaurant'] ]
     #prediction = predict_rating(driver, user_cat_ids, review_dist, biz_id)
     #exbp=expected_rating(biz_preference_demo(driver, user_cat_ids, biz_id, 'NV'))
     #bp=biz_preference_demo(driver, user_cat_ids, biz_id, 'NV')
@@ -196,7 +191,7 @@ def page_input():
 
 
 
-    return biz_predicted_ratings.to_html(escape=False)
+    return recommendations.to_html(escape=False)
 
 
 def predict_rating(driver, user_cat_ids, user_review_dist, business_review_dist, biz_category_lookup, user_category_lookup, biz_id):
@@ -231,7 +226,7 @@ def expected_rating(rating_dist):
     return runsum
 
 def biz_preference_demo(driver, user_cat_ids, all_business_review_dist, user_category_lookup, biz_id):
-    
+
     business_review_dist=all_business_review_dist.loc[all_business_review_dist['b.id']==biz_id].drop_duplicates()
 
     business_review_dist.set_index('u.id',inplace=True)
@@ -243,14 +238,12 @@ def biz_preference_demo(driver, user_cat_ids, all_business_review_dist, user_cat
 
 
 
-    # for cat in user_cat_ids:
-    #
-    #     all_users=user_category_lookup.loc[user_category_lookup['rep.id']==cat]
-    #     users=business_review_dist.merge(all_users, how='inner', right_on='u.id', left_index=True )
-    #     users.to_pickle(f"{cat}_reviews")
     for cat in user_cat_ids:
-        users=pd.read_pickle(f"{cat}_reviews")
-        users_in_cat.append(users)
+
+        all_users=user_category_lookup.loc[user_category_lookup['rep.id']==cat]
+
+        users=business_review_dist.merge(all_users, how='inner', right_on='u.id', left_index=True )
+        user_in_cat.append(users)
 
 
     reviews_in_cat = []
@@ -259,6 +252,7 @@ def biz_preference_demo(driver, user_cat_ids, all_business_review_dist, user_cat
         # print(user_in_cat[i].head(10))
         # print(user_in_cat[i].shape)
         reviews_in_cat.append(user_in_cat[i]['r.stars'])
+
 
     numerator = np.empty(5)
     for i in (1, 2, 3, 4, 5):
