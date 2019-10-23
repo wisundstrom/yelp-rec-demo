@@ -231,7 +231,7 @@ def expected_rating(rating_dist):
     return runsum
 
 def biz_preference_demo(driver, user_cat_ids, all_business_review_dist, user_category_lookup, biz_id):
-
+    
     business_review_dist=all_business_review_dist.loc[all_business_review_dist['b.id']==biz_id].drop_duplicates()
 
     business_review_dist.set_index('u.id',inplace=True)
@@ -243,11 +243,15 @@ def biz_preference_demo(driver, user_cat_ids, all_business_review_dist, user_cat
 
 
 
+    # for cat in user_cat_ids:
+    #
+    #     all_users=user_category_lookup.loc[user_category_lookup['rep.id']==cat]
+    #     users=business_review_dist.merge(all_users, how='inner', right_on='u.id', left_index=True )
+    #     users.to_pickle(f"{cat}_reviews")
     for cat in user_cat_ids:
+        users=pd.read_pickle(f"{cat}_reviews")
+        users_in_cat.append(users)
 
-        all_users=user_category_lookup.loc[user_category_lookup['rep.id']==cat]
-        users=business_review_dist.merge(all_users, how='inner', right_on='u.id', left_index=True )
-        users.to_pickle(f"{cat}_reviews")
 
     reviews_in_cat = []
     for i in range(len(user_in_cat)):
@@ -255,7 +259,6 @@ def biz_preference_demo(driver, user_cat_ids, all_business_review_dist, user_cat
         # print(user_in_cat[i].head(10))
         # print(user_in_cat[i].shape)
         reviews_in_cat.append(user_in_cat[i]['r.stars'])
-
 
     numerator = np.empty(5)
     for i in (1, 2, 3, 4, 5):
