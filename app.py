@@ -1,4 +1,4 @@
-
+import time
 import requests
 import pandas as pd
 import numpy as np
@@ -110,7 +110,7 @@ def test():
 @app.route('/', methods=['POST'])
 def page_input():
     uri = "bolt://3.220.233.169:7687"
-    driver = GraphDatabase.driver(uri, auth=("neo4j", "i-0e23d19f0d8795714"))
+    driver =0 #GraphDatabase.driver(uri, auth=("neo4j", "i-0e23d19f0d8795714"))
     # biz_cats=cypher(driver, "\
     # MATCH (b:Business)-[:IN_CATEGORY]->(c:Category)\
     # WHERE b.id in ['5yZ1XmDcOEsElDeb9PlPDQ','PL3cimEUfNHlenOGSOAdJg','4n81G-pmC3rfhmaPsbwYKg','iwGhazq9eP51PSerTrMrwg','R3TC2oq8fQK9c9BNMZ-ynA']\
@@ -122,7 +122,8 @@ def page_input():
     # RETURN DISTINCT b.id', ['b.id'])
     # test_businesses.to_pickle('test_businesses')
     test_businesses=pd.read_pickle("test_businesses")
-    sample_businesses=test_businesses.sample(150)
+    print(test_businesses.shape)
+    sample_businesses=test_businesses#.sample(20)
 
 
     user_cat_ids = [request.form['cool'], request.form['funny'], request.form['useful']]
@@ -138,8 +139,8 @@ def page_input():
 
     # business_review_dist = cypher(
     #     driver,
-    #     f"MATCH (rep:Reputation)<--(u:User)-[:WROTE]->(r:Review)-[:REVIEWS]->(b:Business)\
-    #     WHERE b.id in {list(test_businesses['b.id'])} AND rep.id in {user_cat_ids}\
+    #     f"MATCH (u:User)-[:WROTE]->(r:Review)-[:REVIEWS]->(b:Business)\
+    #     WHERE b.id in {list(test_businesses['b.id'])}\
     #     RETURN r.stars, u.id, b.id",
     #     [
     #         'r.stars',
@@ -160,11 +161,12 @@ def page_input():
     #         ])
     # biz_category_lookup.to_pickle('biz_category_lookup')
     biz_category_lookup=pd.read_pickle('biz_category_lookup')
+
     # user_category_lookup = cypher(
     #     driver,
     #     f"MATCH (rep:Reputation)<--(u:User)-[:WROTE]->(:Review)-[:REVIEWS]->(b:Business)\
-    #     WHERE b.id in {list(test_businesses['b.id'])} AND rep.id in {user_cat_ids}\
-    #     RETURN u.id, rep.id ",
+    #     WHERE b.id in {list(test_businesses['b.id'])}\
+    #     RETURN DISTINCT u.id, rep.id ",
     #     [
     #         'u.id',
     #         'rep.id'
@@ -173,13 +175,20 @@ def page_input():
     user_category_lookup=pd.read_pickle('user_category_lookup')
 
 
-
-
-
     pd.set_option('display.max_colwidth', -1)
-    predicted_ratings=[(predict_rating(driver, user_cat_ids, user_review_dist, business_review_dist, biz_category_lookup, user_category_lookup,x),x) for x in sample_businesses['b.id']]
-    recommendations=pd.DataFrame(predicted_ratings, columns=['Predicted Rating', 'Restaurant']).sort_values('Predicted Rating', ascending=False).head()
-    recommendations['Restaurant']=[f'<a href="https://www.yelp.com/biz/{x}" target="_blank">{x}</a>' for x in recommendations['Restaurant'] ]
+    # time1=time.time()
+    # predicted_ratings=[(predict_rating(driver, user_cat_ids, user_review_dist, business_review_dist, biz_category_lookup, user_category_lookup,x),x) for x in sample_businesses['b.id']]
+    # time2=time.time()
+    # print(time2-time1)
+
+    time1=time.time()
+    biz_predicted_ratings=[(expected_rating(biz_preference_demo(driver, user_cat_ids, business_review_dist, user_category_lookup,x)),x) for x in sample_businesses['b.id']]
+    time2=time.time()
+    print(time2-time1)
+    # biz_predicted_ratings.to_pickle("111predictedratings")
+
+    # recommendations=pd.DataFrame(predicted_ratings, columns=['Predicted Rating', 'Restaurant']).sort_values('Predicted Rating', ascending=False).head()
+    # recommendations['Restaurant']=[f'<a href="https://www.yelp.com/biz/{x}" target="_blank">{x}</a>' for x in recommendations['Restaurant'] ]
     #prediction = predict_rating(driver, user_cat_ids, review_dist, biz_id)
     #exbp=expected_rating(biz_preference_demo(driver, user_cat_ids, biz_id, 'NV'))
     #bp=biz_preference_demo(driver, user_cat_ids, biz_id, 'NV')
@@ -187,7 +196,7 @@ def page_input():
 
 
 
-    return recommendations.to_html(escape=False)
+    return biz_predicted_ratings.to_html(escape=False)
 
 
 def predict_rating(driver, user_cat_ids, user_review_dist, business_review_dist, biz_category_lookup, user_category_lookup, biz_id):
@@ -221,38 +230,31 @@ def expected_rating(rating_dist):
         runsum += rating_dist[i - 1] * i
     return runsum
 
-def biz_preference_demo(driver, user_cat_ids, business_review_dist, user_category_lookup, biz_id):
+def biz_preference_demo(driver, user_cat_ids, all_business_review_dist, user_category_lookup, biz_id):
 
+    business_review_dist=all_business_review_dist.loc[all_business_review_dist['b.id']==biz_id].drop_duplicates()
+
+    business_review_dist.set_index('u.id',inplace=True)
 
     review_stars = business_review_dist['r.stars'].value_counts()
     num_reviews = business_review_dist['r.stars'].shape[0]
 
-
-    # we initialize a blank list of users in the user categories
     user_in_cat = []
 
-    business_review_dist=business_review_dist.loc[business_review_dist['b.id']==biz_id]
+
 
     for cat in user_cat_ids:
-        users=user_category_lookup.loc[lambda df: cat == df['rep.id']]
-        user_in_cat.append(users['u.id'])
-    print('biz')
 
+        all_users=user_category_lookup.loc[user_category_lookup['rep.id']==cat]
+        users=business_review_dist.merge(all_users, how='inner', right_on='u.id', left_index=True )
+        users.to_pickle(f"{cat}_reviews")
 
     reviews_in_cat = []
-
     for i in range(len(user_in_cat)):
-        sim_user = []
-        print('sim_user')
-        for temp_user in user_in_cat[i]:
-            print('temp_user')#something wrong here
-            temp_rev=business_review_dist.loc[business_review_dist['u.id']==temp_user]
 
-            sim_user.append(temp_rev['r.stars'].astype('int16'))
-
-        reviews_in_cat.append(pd.DataFrame(sim_user, columns =['r.stars']))
-
-
+        # print(user_in_cat[i].head(10))
+        # print(user_in_cat[i].shape)
+        reviews_in_cat.append(user_in_cat[i]['r.stars'])
 
 
     numerator = np.empty(5)
@@ -272,7 +274,7 @@ def biz_preference_demo(driver, user_cat_ids, business_review_dist, user_categor
 
     for i in range(num_cat):
         if not reviews_in_cat[i].empty:
-            cat_stars = reviews_in_cat[i]['r.stars'].value_counts()
+            cat_stars = reviews_in_cat[i].value_counts()
             for j in (1, 2, 3, 4, 5):
                 try:
                     cats_by_stars[i][j - 1] = cat_stars[j]
@@ -305,14 +307,13 @@ def user_preference_demo(driver, user_review_dist, biz_category_lookup, biz_id):
     # categories
     categories_df=biz_category_lookup.loc[biz_category_lookup['b.id']==biz_id]
     cat_ids=set(categories_df['c.id'].values)
-    print('biz')
+
 
 
     # these manipulate the biz categories and user's reviews for computation
     # later
     review_stars = user_review_dist['r.stars'].value_counts()
     num_reviews = user_review_dist['r.stars'].shape[0]
-    cat_ids = list(biz_categories['c.id'])
 
 
 
@@ -323,6 +324,7 @@ def user_preference_demo(driver, user_review_dist, biz_category_lookup, biz_id):
         for i in range(5):
             if cat in user_review_dist['cats'].iloc[i]:
                 temp.append(user_review_dist['b.id'].iloc[i])
+
         if temp:
             biz_in_cat.append(temp)
 
@@ -335,7 +337,7 @@ def user_preference_demo(driver, user_review_dist, biz_category_lookup, biz_id):
         sim_biz = []
 
         for temp_biz in biz_in_cat[i]:
-#             temp_biz=biz_in_cat[i][j]
+
             temp_rev=user_review_dist.loc[user_review_dist['b.id']==temp_biz]
 
             sim_biz.append(int(temp_rev['r.stars']))
@@ -387,5 +389,7 @@ def user_preference_demo(driver, user_review_dist, biz_category_lookup, biz_id):
     user_prefs_un_normalized = PRu * PRaj
 
     user_prefs = user_prefs_un_normalized/sum(user_prefs_un_normalized)
+
+    timetest2=time.time()
 
     return user_prefs
