@@ -1,10 +1,10 @@
 import time
-import requests
 import pandas as pd
 import numpy as np
 from neo4j import GraphDatabase
 from flask import Flask, request
 app = Flask(__name__)
+
 
 @app.route('/')
 def test():
@@ -107,66 +107,103 @@ def test():
 </html>
     """
 
+
 @app.route('/', methods=['POST'])
 def page_input():
-    uri = "bolt://3.220.233.169:7687"
-    driver =0# GraphDatabase.driver(uri, auth=("neo4j", "i-0e23d19f0d8795714"))
+    """ This is the function that takes the input from the initial web page and then computes the
+    recommendations and serves back the results page with the links to the yelp pages for the
+    recomended pages"""
 
-    biz_cats=pd.read_pickle("biz_cats")
+    # this driver variable just tells the functions later that we will not be making calls to the
+    # neo4j server, all the data we need is stored locally If the database is changed or we want to
+    # get a new selection of businesses to use for this demo, we will need to connect to the server
+    # again so the option has to remain.
+    #GraphDatabase.driver(uri, auth=("neo4j", "password"))
+    driver = 0
 
+    biz_cats = pd.read_pickle("biz_cats")
 
-    test_businesses=pd.read_pickle("test_businesses")
+    test_businesses = pd.read_pickle("test_businesses")
 
-    sample_businesses=test_businesses.sample(30)
+    sample_businesses = test_businesses.sample(30)
 
+    user_cat_ids = [
+        request.form['cool'],
+        request.form['funny'],
+        request.form['useful']]
+    ratings = []
 
-    user_cat_ids = [request.form['cool'], request.form['funny'], request.form['useful']]
-    ratings=[]
-
-    for key in ['5yZ1XmDcOEsElDeb9PlPDQ','PL3cimEUfNHlenOGSOAdJg','4n81G-pmC3rfhmaPsbwYKg','iwGhazq9eP51PSerTrMrwg','R3TC2oq8fQK9c9BNMZ-ynA']:
+    for key in [
+        '5yZ1XmDcOEsElDeb9PlPDQ',
+        'PL3cimEUfNHlenOGSOAdJg',
+        '4n81G-pmC3rfhmaPsbwYKg',
+        'iwGhazq9eP51PSerTrMrwg',
+            'R3TC2oq8fQK9c9BNMZ-ynA']:
         rating = request.form[key]
-        ratings.append([key,int(rating)])
+        ratings.append([key, int(rating)])
 
-    ratings_df=pd.DataFrame(ratings, columns=['b.id','r.stars'])
-    user_review_dist=ratings_df.merge(biz_cats, on='b.id')
-    biz_id='Os1n1_idfw9vv9kwULGJnQ'
+    ratings_df = pd.DataFrame(ratings, columns=['b.id', 'r.stars'])
+    user_review_dist = ratings_df.merge(biz_cats, on='b.id')
+    biz_id = 'Os1n1_idfw9vv9kwULGJnQ'
 
-    business_review_dist=pd.read_pickle('business_review_dist')
+    business_review_dist = pd.read_pickle('business_review_dist')
 
-    biz_category_lookup=pd.read_pickle('biz_category_lookup')
+    biz_category_lookup = pd.read_pickle('biz_category_lookup')
 
-
-    user_category_lookup=pd.read_pickle('user_category_lookup')
-
+    user_category_lookup = pd.read_pickle('user_category_lookup')
 
     pd.set_option('display.max_colwidth', -1)
 
-    predicted_ratings=[(predict_rating(driver, user_cat_ids, user_review_dist, business_review_dist, biz_category_lookup, user_category_lookup,x),x) for x in sample_businesses['b.id']]
+    predicted_ratings = [
+        (predict_rating(
+            driver,
+            user_cat_ids,
+            user_review_dist,
+            business_review_dist,
+            biz_category_lookup,
+            user_category_lookup,
+            x),
+            x) for x in sample_businesses['b.id']]
 
-
-
-    recommendations=pd.DataFrame(predicted_ratings, columns=['Predicted Rating', 'Restaurant']).sort_values('Predicted Rating', ascending=False).head()
-    recommendations['Restaurant']=[f'<a href="https://www.yelp.com/biz/{x}" target="_blank">{x}</a>' for x in recommendations['Restaurant'] ]
-
-
+    recommendations = pd.DataFrame(
+        predicted_ratings,
+        columns=[
+            'Predicted Rating',
+            'Restaurant']).sort_values(
+        'Predicted Rating',
+        ascending=False).head()
+    recommendations['Restaurant'] = [f'<a href="https://www.yelp.com/biz/{x}"\
+    target="_blank">{x}</a>' for x in recommendations['Restaurant']]
 
     return recommendations.to_html(escape=False)
 
 
-def predict_rating(driver, user_cat_ids, user_review_dist, business_review_dist, biz_category_lookup, user_category_lookup, biz_id):
+def predict_rating(
+        driver,
+        user_cat_ids,
+        user_review_dist,
+        business_review_dist,
+        biz_category_lookup,
+        user_category_lookup,
+        biz_id):
 
-    biz_pref = biz_preference_demo(driver, user_cat_ids, business_review_dist, user_category_lookup, biz_id)
-    user_pref = user_preference_demo(driver, user_review_dist, biz_category_lookup, biz_id)
-    joint_prob = (biz_pref * user_pref)/sum(biz_pref * user_pref)
+    biz_pref = biz_preference_demo(
+        driver,
+        user_cat_ids,
+        business_review_dist,
+        user_category_lookup,
+        biz_id)
+    user_pref = user_preference_demo(
+        driver, user_review_dist, biz_category_lookup, biz_id)
+    joint_prob = (biz_pref * user_pref) / sum(biz_pref * user_pref)
 
     return expected_rating(joint_prob)
 
 
-
 def cypher(driver, query, results_columns):
-    """This is wrapper for sending basic cypher queries to a neo4j server. Input is a neo4j connection
-    driver, a string representing a cypher queryand a list of string for data frame column names.
-    returns the dataframe of the results."""
+    """This is wrapper for sending basic cypher queries to a neo4j server. Input is a neo4j
+    connection driver, a string representing a cypher queryand a list of string for data frame
+    column names. It returns the dataframe of the results."""
 
     with driver.session() as session:
         result = session.run(query)
@@ -184,43 +221,45 @@ def expected_rating(rating_dist):
         runsum += rating_dist[i - 1] * i
     return runsum
 
-def biz_preference_demo(driver, user_cat_ids, all_business_review_dist, user_category_lookup, biz_id):
 
-    business_review_dist=all_business_review_dist.loc[all_business_review_dist['b.id']==biz_id].drop_duplicates()
+def biz_preference_demo(
+        driver,
+        user_cat_ids,
+        all_business_review_dist,
+        user_category_lookup,
+        biz_id):
 
-    business_review_dist.set_index('u.id',inplace=True)
+    business_review_dist = all_business_review_dist.loc[all_business_review_dist['b.id']
+                                                        == biz_id].drop_duplicates()
+
+    business_review_dist.set_index('u.id', inplace=True)
 
     review_stars = business_review_dist['r.stars'].value_counts()
     num_reviews = business_review_dist['r.stars'].shape[0]
 
     user_in_cat = []
 
-
-
     for cat in user_cat_ids:
 
-        all_users=user_category_lookup.loc[user_category_lookup['rep.id']==cat]
+        all_users = user_category_lookup.loc[user_category_lookup['rep.id'] == cat]
 
-        users=business_review_dist.merge(all_users, how='inner', right_on='u.id', left_index=True )
+        users = business_review_dist.merge(
+            all_users, how='inner', right_on='u.id', left_index=True)
         user_in_cat.append(users)
-
 
     reviews_in_cat = []
     for i in range(len(user_in_cat)):
 
-
         reviews_in_cat.append(user_in_cat[i]['r.stars'])
-
 
     numerator = np.empty(5)
     for i in (1, 2, 3, 4, 5):
         try:
             numerator[i - 1] = review_stars[i]
-        except BaseException:
+        except (IndexError, KeyError):
             numerator[i - 1] = 0
 
     PRu = (numerator + 1) / (num_reviews + 5)
-
 
     num_cat = len(user_in_cat)
     cats_by_stars = np.empty((num_cat, 5))
@@ -231,10 +270,8 @@ def biz_preference_demo(driver, user_cat_ids, all_business_review_dist, user_cat
             for j in (1, 2, 3, 4, 5):
                 try:
                     cats_by_stars[i][j - 1] = cat_stars[j]
-                except BaseException:
+                except (IndexError, KeyError):
                     cats_by_stars[i][j - 1] = 0
-
-
 
     PRaj = ((cats_by_stars + 1) / (numerator + num_cat)).prod(axis=0)
 
@@ -242,37 +279,37 @@ def biz_preference_demo(driver, user_cat_ids, all_business_review_dist, user_cat
     # sum to 1
     biz_prefs_un_normalized = PRu * PRaj
 
-    biz_prefs = biz_prefs_un_normalized/sum(biz_prefs_un_normalized)
+    biz_prefs = biz_prefs_un_normalized / sum(biz_prefs_un_normalized)
 
     return biz_prefs
 
-def user_preference_demo(driver, user_review_dist, biz_category_lookup, biz_id):
+
+def user_preference_demo(
+        driver,
+        user_review_dist,
+        biz_category_lookup,
+        biz_id):
 
     # send a cypher query to the server that returns all of the biz's
     # categories
-    categories_df=biz_category_lookup.loc[biz_category_lookup['b.id']==biz_id]
-    cat_ids=set(categories_df['c.id'].values)
-
-
+    categories_df = biz_category_lookup.loc[biz_category_lookup['b.id'] == biz_id]
+    cat_ids = set(categories_df['c.id'].values)
 
     # these manipulate the biz categories and user's reviews for computation
     # later
     review_stars = user_review_dist['r.stars'].value_counts()
     num_reviews = user_review_dist['r.stars'].shape[0]
 
-
-
     # we initialize a blank list of businesses in the biz categories
     biz_in_cat = []
     for cat in cat_ids:
-        temp=[]
+        temp = []
         for i in range(5):
             if cat in user_review_dist['cats'].iloc[i]:
                 temp.append(user_review_dist['b.id'].iloc[i])
 
         if temp:
             biz_in_cat.append(temp)
-
 
     reviews_in_cat = []
 
@@ -283,10 +320,9 @@ def user_preference_demo(driver, user_review_dist, biz_category_lookup, biz_id):
 
         for temp_biz in biz_in_cat[i]:
 
-            temp_rev=user_review_dist.loc[user_review_dist['b.id']==temp_biz]
+            temp_rev = user_review_dist.loc[user_review_dist['b.id'] == temp_biz]
 
             sim_biz.append(int(temp_rev['r.stars']))
-
 
         reviews_in_cat.append(pd.DataFrame(sim_biz, columns=['r.stars']))
 
@@ -319,15 +355,12 @@ def user_preference_demo(driver, user_review_dist, biz_category_lookup, biz_id):
                 except BaseException:
                     cats_by_stars[i][j - 1] = 0
 
-
     PRaj = ((cats_by_stars + 1) / (numerator + num_cat)).prod(axis=0)
 
     # we now take the product of the distributions and normalize them so they
     # sum to 1
     user_prefs_un_normalized = PRu * PRaj
 
-    user_prefs = user_prefs_un_normalized/sum(user_prefs_un_normalized)
-
-    timetest2=time.time()
+    user_prefs = user_prefs_un_normalized / sum(user_prefs_un_normalized)
 
     return user_prefs
