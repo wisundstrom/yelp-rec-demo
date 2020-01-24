@@ -29,6 +29,5 @@ After a few seconds the demo will return a selection of links to the yelp pages 
 * [app.py](app.py) contains the majority of the code for the recomendation algorithm and the flask app.
 
 * [requirements.txt](requirements.txt) and [Procfile](Procfile) are used by flask to set up the web app and python environment
-
-
+* [data](data) contatins pre downloaded chunks of data from the graph database so that the demo can be run without the graph database being online.
 
