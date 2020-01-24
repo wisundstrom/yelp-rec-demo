@@ -10,6 +10,8 @@ The review history section classifies the user based on how other users respond 
 
 For example, if I thought my reviews would be not be cool, they would be around the middle of funny, and would be almost the most useful, I would select numbers around 1 (out of 4) for cool, 2 (out of 4) for funny and 6 (out of 7) for useful.
 
+![User History Example](review_history.png)
+
 ### Ratings History
 This section classifies the type of businesses the user likes based on their ratings history. For this part of the demo, the user should input an estimate of what the would rate each business, from 1 to 5 stars. Basing this on business names is fine, but here are some short decriptions of the restaurants:
 
