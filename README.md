@@ -24,6 +24,9 @@ After a few seconds the demo will return a selection of links to the yelp pages 
 
 ## Repository contents
 
-[app.py](../app.py) contains the majority of the code for the recomendation algorithm and the flask app.
+* [app.py](app.py) contains the majority of the code for the recomendation algorithm and the flask app.
+
+* [requirements.txt](requirements.txt) and [Procfile](Procfile) are used by flask to set up the web app and python environment
+
 
 
