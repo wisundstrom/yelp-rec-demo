@@ -121,9 +121,9 @@ def page_input():
     #GraphDatabase.driver(uri, auth=("neo4j", "password"))
     driver = 0
 
-    biz_cats = pd.read_pickle("biz_cats")
+    biz_cats = pd.read_pickle("data/biz_cats")
 
-    test_businesses = pd.read_pickle("test_businesses")
+    test_businesses = pd.read_pickle("data/test_businesses")
 
     sample_businesses = test_businesses.sample(30)
 
@@ -146,11 +146,11 @@ def page_input():
     user_review_dist = ratings_df.merge(biz_cats, on='b.id')
     biz_id = 'Os1n1_idfw9vv9kwULGJnQ'
 
-    business_review_dist = pd.read_pickle('business_review_dist')
+    business_review_dist = pd.read_pickle('data/business_review_dist')
 
-    biz_category_lookup = pd.read_pickle('biz_category_lookup')
+    biz_category_lookup = pd.read_pickle('data/biz_category_lookup')
 
-    user_category_lookup = pd.read_pickle('user_category_lookup')
+    user_category_lookup = pd.read_pickle('data/user_category_lookup')
 
     pd.set_option('display.max_colwidth', -1)
 
