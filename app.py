@@ -186,6 +186,8 @@ def predict_rating(
         biz_category_lookup,
         user_category_lookup,
         biz_id):
+        """ This function takes the user and business preference estimates and combines them
+        into a single estimate."""
 
     biz_pref = biz_preference_demo(
         driver,
@@ -228,6 +230,8 @@ def biz_preference_demo(
         all_business_review_dist,
         user_category_lookup,
         biz_id):
+        """This function uses the ratings of users similar to the target user who have rated the
+        target restaurant to estimate the target user's rating of the target restaurant."""
 
     business_review_dist = all_business_review_dist.loc[all_business_review_dist['b.id']
                                                         == biz_id].drop_duplicates()
@@ -289,6 +293,8 @@ def user_preference_demo(
         user_review_dist,
         biz_category_lookup,
         biz_id):
+        """ This function uses the review history of the target user to predict their rating of the
+        target restaurant based on their ratings of similar restaurants."""
 
     # send a cypher query to the server that returns all of the biz's
     # categories
